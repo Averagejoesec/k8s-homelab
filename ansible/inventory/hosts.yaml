@@ -1,0 +1,6 @@
+all:
+  hosts:
+    gitea-vm:
+      ansible_host: 10.0.0.54
+      ansible_user: ubuntu
+      ansible_ssh_common_args: '-J proxmox'

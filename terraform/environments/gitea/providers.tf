@@ -17,7 +17,7 @@ provider "proxmox" {
     username = "root"
     node {
       name = "proxmox"
-      address = "192.168.1.50"
+      address = var.proxmox_address
       port = 22
     }
 }
