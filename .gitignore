@@ -5,6 +5,7 @@
 *.tfstate
 *.tfstate.*
 *.terraform.lock.hcl
+hosts.yaml
 
 # Crash log files
 crash.log

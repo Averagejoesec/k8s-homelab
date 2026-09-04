@@ -1,0 +1,10 @@
+---
+- name: Apply common configuration
+  hosts: all
+  roles:
+    - common
+
+- name: Deploy Gitea
+  hosts: gitea
+  roles:
+    - gitea

@@ -1,0 +1,9 @@
+---
+gitea_version: "1.21.4"
+gitea_port: 3000
+gitea_db_type: sqlite3
+gitea_install_dir: /opt/gitea
+gitea_data_dir: /opt/gitea/data
+gitea_user: gitea
+gitea_http_domain: "10.0.0.54"
+gitea_run_mode: prod

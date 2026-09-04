@@ -1,0 +1,69 @@
+---
+- name: Create gitea user
+  user:
+    name: "{{ gitea_user }}"
+    system: yes
+    shell: /bin/bash
+    home: "{{ gitea_install_dir }}"
+    create_home: yes
+  become: yes
+
+- name: Create gitea directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ gitea_user }}"
+    group: "{{ gitea_user }}"
+    mode: '0750'
+  loop:
+    - "{{ gitea_install_dir }}"
+    - "{{ gitea_data_dir }}"
+    - /etc/gitea
+  become: yes
+
+- name: Download gitea binary
+  get_url:
+    url: "https://github.com/go-gitea/gitea/releases/download/v{{ gitea_version }}/gitea-{{ gitea_version }}-linux-amd64"
+    dest: /usr/local/bin/gitea
+    mode: '0755'
+    force: no
+  become: yes
+
+- name: Create gitea config directory
+  file:
+    path: /etc/gitea
+    state: directory
+    owner: root
+    group: "{{ gitea_user }}"
+    mode: '0770'
+  become: yes
+
+- name: Create gitea systemd service
+  copy:
+    dest: /etc/systemd/system/gitea.service
+    content: |
+      [Unit]
+      Description=Gitea
+      After=network.target
+
+      [Service]
+      User={{ gitea_user }}
+      Group={{ gitea_user }}
+      WorkingDirectory={{ gitea_install_dir }}
+      ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
+      Restart=always
+      Environment=USER={{ gitea_user }} HOME={{ gitea_install_dir }} GITEA_WORK_DIR={{ gitea_install_dir }}
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: '0644'
+  become: yes
+  notify: restart gitea
+
+- name: Enable and start gitea
+  systemd:
+    name: gitea
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
