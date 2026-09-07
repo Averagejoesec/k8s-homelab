@@ -57,4 +57,5 @@ kubeconfig
 
 # Ansible
 *.vault
-vault_password
+vault_passwordkubeconfig
+.kube/

@@ -1,0 +1,105 @@
+---
+- name: Disable swap
+  command: swapoff -a
+  become: yes
+
+- name: Remove swap from fstab
+  lineinfile:
+    path: /etc/fstab
+    regexp: '.*swap.*'
+    state: absent
+  become: yes
+
+- name: Load required kernel modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+  become: yes
+
+- name: Persist kernel modules
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+  become: yes
+
+- name: Set required sysctl params
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - { key: 'net.bridge.bridge-nf-call-iptables',  value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { key: 'net.ipv4.ip_forward',                 value: '1' }
+  become: yes
+
+- name: Install containerd
+  apt:
+    name: containerd
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Create containerd config directory
+  file:
+    path: /etc/containerd
+    state: directory
+  become: yes
+
+- name: Generate default containerd config
+  shell: containerd config default > /etc/containerd/config.toml
+  become: yes
+
+- name: Set SystemdCgroup to true
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  become: yes
+  notify: restart containerd
+
+- name: Enable and start containerd
+  systemd:
+    name: containerd
+    enabled: yes
+    state: started
+  become: yes
+
+- name: Add Kubernetes apt key
+  apt_key:
+    url: https://pkgs.k8s.io/core:/stable:/v1.35/deb/Release.key
+    state: present
+  become: yes
+
+- name: Add Kubernetes apt repository
+  apt_repository:
+    repo: deb https://pkgs.k8s.io/core:/stable:/v1.35/deb/ /
+    state: present
+    filename: kubernetes
+  become: yes
+
+- name: Install kubeadm kubelet kubectl
+  apt:
+    name:
+      - kubelet=1.35.*
+      - kubeadm=1.35.*
+      - kubectl=1.35.*
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Hold kubeadm kubelet kubectl at current version
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+  become: yes

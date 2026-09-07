@@ -8,3 +8,8 @@
   hosts: gitea
   roles:
     - gitea
+
+- name: Apply K8s prerequisites
+  hosts: k8s
+  roles:
+    - k8s-prereqs

@@ -1,6 +1,3 @@
-# k8s-homelab
-
-# Login for each session:
 # 1. Verify Proxmox is up
 ssh proxmox echo "ok"
 
