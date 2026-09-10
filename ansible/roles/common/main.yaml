@@ -72,13 +72,15 @@
       FallbackDNS=1.1.1.1
       Domains=homelab.internal
       DNSStubListener=no
+    force: yes
   become: yes
   notify: restart systemd-resolved
 
-- name: Point resolv.conf to systemd-resolved
+- name: Symlink resolv.conf to systemd-resolved runtime file
   file:
     path: /etc/resolv.conf
     src: /run/systemd/resolve/resolv.conf
     state: link
     force: yes
   become: yes
+  notify: restart systemd-resolved
