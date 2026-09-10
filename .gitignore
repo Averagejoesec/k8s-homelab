@@ -59,3 +59,12 @@ kubeconfig
 *.vault
 vault_passwordkubeconfig
 .kube/
+
+# Vault
+vault-init.txt
+.vault-token
+**/vault_token
+
+# Ansible secrets
+ansible/roles/*/defaults/main.yaml
+ansible/roles/*/defaults/main.yml
