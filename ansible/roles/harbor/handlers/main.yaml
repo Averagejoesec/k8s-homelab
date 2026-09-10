@@ -1,0 +1,4 @@
+---
+- name: restart harbor
+  command: docker-compose -f /opt/harbor/docker-compose.yml restart
+  become: yes

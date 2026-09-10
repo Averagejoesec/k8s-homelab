@@ -38,3 +38,23 @@
     regexp: '.*swap.*'
     state: absent
   become: yes
+
+- name: Configure systemd-resolved to use Pi-hole
+  copy:
+    dest: /etc/systemd/resolved.conf
+    content: |
+      [Resolve]
+      DNS=10.0.0.56
+      FallbackDNS=1.1.1.1
+      Domains=homelab.internal
+      DNSStubListener=no
+  become: yes
+  notify: restart systemd-resolved
+
+- name: Point resolv.conf to systemd-resolved
+  file:
+    path: /etc/resolv.conf
+    src: /run/systemd/resolve/resolv.conf
+    state: link
+    force: yes
+  become: yes

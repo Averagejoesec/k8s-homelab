@@ -9,6 +9,21 @@
   roles:
     - gitea
 
+- name: Deploy Harbor
+  hosts: harbor
+  roles:
+    - harbor
+
+- name: Deploy Pi-hole
+  hosts: pihole
+  roles:
+    - pihole
+
+- name: Deploy Vault
+  hosts: vault
+  roles:
+    - vault
+
 - name: Apply K8s prerequisites
   hosts: k8s
   roles:

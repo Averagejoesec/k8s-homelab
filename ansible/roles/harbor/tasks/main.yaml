@@ -1,0 +1,110 @@
+---
+- name: Install required packages
+  apt:
+    name:
+      - docker.io
+      - docker-compose
+      - curl
+      - openssl
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Start and enable Docker
+  systemd:
+    name: docker
+    enabled: yes
+    state: started
+  become: yes
+
+- name: Add ubuntu user to docker group
+  user:
+    name: ubuntu
+    groups: docker
+    append: yes
+  become: yes
+
+- name: Create harbor directory
+  file:
+    path: "{{ harbor_install_dir }}"
+    state: directory
+    mode: '0755'
+  become: yes
+
+- name: Download Harbor installer
+  get_url:
+    url: "https://github.com/goharbor/harbor/releases/download/{{ harbor_version }}/harbor-offline-installer-{{ harbor_version }}.tgz"
+    dest: /tmp/harbor.tgz
+    mode: '0644'
+  become: yes
+
+- name: Extract Harbor
+  unarchive:
+    src: /tmp/harbor.tgz
+    dest: /opt/
+    remote_src: yes
+  become: yes
+
+- name: Copy harbor config template
+  copy:
+    src: /opt/harbor/harbor.yml.tmpl
+    dest: /opt/harbor/harbor.yml
+    remote_src: yes
+  become: yes
+
+- name: Configure harbor hostname
+  replace:
+    path: /opt/harbor/harbor.yml
+    regexp: 'hostname: reg.mydomain.com'
+    replace: "hostname: {{ harbor_hostname }}"
+  become: yes
+
+- name: Configure Harbor external URL
+  replace:
+    path: /opt/harbor/harbor.yml
+    regexp: '^# external_url: https://reg\.mydomain\.com:8433'
+    replace: "external_url: {{ harbor_external_url }}"
+  become: yes
+
+- name: Disable HTTPS for homelab
+  replace:
+    path: /opt/harbor/harbor.yml
+    regexp: '^https:'
+    replace: '#https:'
+  become: yes
+
+- name: Comment out https port
+  replace:
+    path: /opt/harbor/harbor.yml
+    regexp: '^  port: 443'
+    replace: '#  port: 443'
+  become: yes
+
+- name: Comment out certificate
+  replace:
+    path: /opt/harbor/harbor.yml
+    regexp: '^  certificate: /your/certificate/path'
+    replace: '#  certificate: /your/certificate/path'
+  become: yes
+
+- name: Comment out private key
+  replace:
+    path: /opt/harbor/harbor.yml
+    regexp: '^  private_key: /your/private/key/path'
+    replace: '#  private_key: /your/private/key/path'
+  become: yes
+
+- name: Set admin password
+  replace:
+    path: /opt/harbor/harbor.yml
+    regexp: 'harbor_admin_password: Harbor12345'
+    replace: "harbor_admin_password: {{ harbor_admin_password }}"
+  become: yes
+
+- name: Run Harbor installer
+  command: /opt/harbor/install.sh --with-trivy
+  args:
+    chdir: /opt/harbor
+  become: yes
+  register: harbor_install
+  changed_when: harbor_install.rc == 0

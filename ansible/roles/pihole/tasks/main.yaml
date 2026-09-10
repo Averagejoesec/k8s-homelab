@@ -1,0 +1,192 @@
+---
+# ============================================================
+# DOCKER INSTALL
+# ============================================================
+- name: Remove conflicting docker packages
+  apt:
+    name:
+      - docker.io
+      - docker-compose
+      - docker-doc
+      - podman-docker
+      - containerd
+      - runc
+    state: absent
+    purge: yes
+  become: yes
+  ignore_errors: yes
+
+- name: Remove conflicting docker source lists
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/sources.list.d/docker.list
+    - /etc/apt/sources.list.d/download_docker_com_linux_ubuntu.list
+    - /etc/apt/keyrings/docker.gpg
+    - /usr/share/keyrings/docker-archive-keyring.gpg
+  become: yes
+
+- name: Install Docker dependencies
+  apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Create apt keyrings directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  become: yes
+
+- name: Add Docker GPG key
+  shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+    gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+  args:
+    creates: /etc/apt/keyrings/docker.gpg
+  become: yes
+
+- name: Add Docker repository
+  copy:
+    dest: /etc/apt/sources.list.d/docker.list
+    content: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_facts['distribution_release'] }} stable\n"
+    mode: '0644'
+  become: yes
+
+- name: Install Docker CE and Compose V2
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Set iptables to legacy for Docker compatibility
+  command: "update-alternatives --set {{ item.name }} {{ item.path }}"
+  loop:
+    - { name: iptables,  path: /usr/sbin/iptables-legacy }
+    - { name: ip6tables, path: /usr/sbin/ip6tables-legacy }
+  become: yes
+
+- name: Enable and start Docker
+  systemd:
+    name: docker
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+
+# ============================================================
+# PIHOLE INSTALL
+# ============================================================
+- name: Create pihole directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /opt/pihole/etc-pihole
+    - /opt/pihole/etc-dnsmasq.d
+  become: yes
+
+- name: Clean pihole databases
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /opt/pihole/etc-pihole/gravity.db
+    - /opt/pihole/etc-pihole/gravity.db_temp
+    - /opt/pihole/etc-pihole/pihole.db
+  become: yes
+  when: pihole_clean_db | default(false)
+
+- name: Create docker-compose file
+  copy:
+    dest: /opt/pihole/docker-compose.yml
+    mode: '0644'
+    content: |
+      services:
+        pihole:
+          container_name: pihole
+          image: pihole/pihole:latest
+          network_mode: host
+          environment:
+            TZ: UTC
+            FTLCONF_webserver_api_password: "{{ pihole_password }}"
+            FTLCONF_dns_upstreams: "{{ pihole_dns1 }};{{ pihole_dns2 }}"
+            FTLCONF_dns_listeningMode: "all"
+          volumes:
+            - /opt/pihole/etc-pihole:/etc/pihole
+            - /opt/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
+          restart: unless-stopped
+  become: yes
+
+- name: Start pihole
+  command: docker compose -f /opt/pihole/docker-compose.yml up -d --pull always
+  args:
+    chdir: /opt/pihole
+  become: yes
+
+- name: Wait for pihole to be healthy
+  command: docker inspect --format="{{ '{{' }}.State.Health.Status{{ '}}' }}" pihole
+  register: pihole_health
+  until: pihole_health.stdout == "healthy"
+  retries: 18
+  delay: 10
+  become: yes
+
+# ============================================================
+# DNS RECORDS VIA API
+# ============================================================
+- name: Get Pi-hole API auth token
+  uri:
+    url: "http://localhost/api/auth"
+    method: POST
+    body_format: json
+    body:
+      password: "{{ pihole_password }}"
+    status_code: 200
+  register: pihole_auth
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Add homelab DNS records via API
+  uri:
+    url: "http://localhost/api/config/dns"
+    method: PATCH
+    body_format: json
+    body:
+      config:
+        dns:
+          hosts:
+            - "10.0.0.50 proxmox.homelab.internal"
+            - "10.0.0.51 k8s-control.homelab.internal"
+            - "10.0.0.52 k8s-worker-01.homelab.internal"
+            - "10.0.0.53 k8s-worker-02.homelab.internal"
+            - "10.0.0.54 gitea.homelab.internal"
+            - "10.0.0.55 harbor.homelab.internal"
+            - "10.0.0.56 pihole.homelab.internal"
+            - "10.0.0.57 vault.homelab.internal"
+    headers:
+      X-FTL-SID: "{{ pihole_auth.json.session.sid }}"
+    status_code: [200, 201, 204]
+  delegate_to: "{{ inventory_hostname }}"
+
+# ============================================================
+# VERIFY
+# ============================================================
+- name: Verify DNS resolution works
+  command: docker exec pihole nslookup gitea.homelab.internal 127.0.0.1
+  become: yes
+  register: dns_check
+  failed_when: "'10.0.0.54' not in dns_check.stdout"
+  changed_when: false

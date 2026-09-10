@@ -1,0 +1,73 @@
+---
+- name: Install dependencies
+  apt:
+    name:
+      - curl
+      - unzip
+      - gpg
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Add HashiCorp GPG key
+  apt_key:
+    url: https://apt.releases.hashicorp.com/gpg
+    state: present
+  become: yes
+
+- name: Add HashiCorp repository
+  apt_repository:
+    repo: "deb https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    state: present
+  become: yes
+
+- name: Install Vault
+  apt:
+    name: vault
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Create vault directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: vault
+    group: vault
+    mode: '0750'
+  loop:
+    - "{{ vault_install_dir }}"
+    - "{{ vault_data_dir }}"
+    - "{{ vault_config_dir }}"
+  become: yes
+
+- name: Write vault config
+  copy:
+    dest: "{{ vault_config_dir }}/vault.hcl"
+    owner: vault
+    group: vault
+    mode: '0640'
+    content: |
+      ui = true
+
+      storage "file" {
+        path = "{{ vault_data_dir }}"
+      }
+
+      listener "tcp" {
+        address     = "0.0.0.0:{{ vault_port }}"
+        tls_disable = true
+      }
+
+      api_addr = "http://{{ vault_address }}:{{ vault_port }}"
+      cluster_addr = "http://{{ vault_address }}:8201"
+  become: yes
+  notify: restart vault
+
+- name: Enable and start vault
+  systemd:
+    name: vault
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes

@@ -1,0 +1,12 @@
+---
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted
+  become: yes
+
+- name: restart pihole
+  command: docker compose -f /opt/pihole/docker-compose.yml restart
+  args:
+    chdir: /opt/pihole
+  become: yes
