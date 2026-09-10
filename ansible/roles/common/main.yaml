@@ -1,4 +1,28 @@
 ---
+- name: Disable apt auto-updates and notifiers
+  systemd:
+    name: "{{ item }}"
+    enabled: no
+    state: stopped
+  loop:
+    - unattended-upgrades
+    - apt-daily.service
+    - apt-daily-upgrade.service
+    - apt-daily.timer
+    - apt-daily-upgrade.timer
+  become: yes
+  ignore_errors: yes
+
+- name: Remove update-notifier
+  apt:
+    name:
+      - update-notifier-common
+      - update-manager-core
+    state: absent
+    purge: yes
+  become: yes
+  ignore_errors: yes
+
 - name: Update apt cache
   apt:
     update_cache: yes

@@ -2,6 +2,27 @@
 # ============================================================
 # DOCKER INSTALL
 # ============================================================
+- name: Check if Docker is already installed
+  command: docker --version
+  register: docker_installed
+  ignore_errors: yes
+  changed_when: false
+
+- name: Remove conflicting docker packages
+  apt:
+    name:
+      - docker.io
+      - docker-compose
+      - docker-doc
+      - podman-docker
+      - containerd
+      - runc
+    state: absent
+    purge: yes
+  become: yes
+  ignore_errors: yes
+  when: docker_installed.rc != 0
+
 - name: Remove conflicting docker packages
   apt:
     name:
