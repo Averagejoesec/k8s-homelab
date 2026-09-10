@@ -68,3 +68,6 @@ vault-init.txt
 # Ansible secrets
 ansible/roles/*/defaults/main.yaml
 ansible/roles/*/defaults/main.yml
+
+# Private notes
+private-note.md
