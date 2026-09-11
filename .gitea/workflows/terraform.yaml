@@ -1,0 +1,53 @@
+name: Terraform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Get Vault Secret ID
+        id: vault-secret-id
+        run: |
+          SECRET_ID=$(curl -s \
+            --header "X-Vault-Token: ${{ secrets.VAULT_SECRET_ID_TOKEN }}" \
+            --request POST \
+            ${{ vars.VAULT_ADDR }}/v1/auth/approle/role/terraform/secret-id \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['secret_id'])")
+          echo "secret_id=$SECRET_ID" >> $GITHUB_OUTPUT
+
+      - name: Get Vault Token
+        id: vault-token
+        run: |
+          TOKEN=$(curl -s \
+            --request POST \
+            --data "{\"role_id\":\"${{ vars.VAULT_TERRAFORM_ROLE_ID }}\",\"secret_id\":\"${{ steps.vault-secret-id.outputs.secret_id }}\"}" \
+            ${{ vars.VAULT_ADDR }}/v1/auth/approle/login \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['auth']['client_token'])")
+          echo "::add-mask::$TOKEN"
+          echo "vault_token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Init
+        working-directory: terraform/environments/infrastructure
+        env:
+          VAULT_TOKEN: ${{ steps.vault-token.outputs.vault_token }}
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: terraform/environments/infrastructure
+        env:
+          VAULT_TOKEN: ${{ steps.vault-token.outputs.vault_token }}
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        run: terraform plan
